@@ -1,0 +1,42 @@
+{
+  "servers": {
+    "1314291356579139636": {
+      "panel_password": "Michal2015!"
+    }
+  },
+  "logs": [
+    {}
+  ],
+  "mutes": {},
+  "bans": {},
+  "economy": {
+    "1314291356579139636": {
+      "1226507112235012139": {
+        "balance": 100000000002422,
+        "lastWork": 1763230864451,
+        "lastDaily": 1763230907499,
+        "lastWeekly": 1763230915039
+      }
+    }
+  },
+  "shop": {
+    "1314291356579139636": [
+      {
+        "name": "Premium (Rola)",
+        "desc": "",
+        "price": 500,
+        "giverole": true,
+        "role": "1357665563832352779",
+        "requiresrole": ""
+      },
+      {
+        "name": "VIP (Rola)",
+        "desc": "",
+        "price": 5000,
+        "giverole": true,
+        "role": "1357665561827479643",
+        "requiresrole": "1357665563832352779"
+      }
+    ]
+  }
+}

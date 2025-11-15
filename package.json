@@ -1,19 +1,18 @@
 {
-  "name": "zeppbot",
+  "name": "zeppbot-json",
   "version": "1.0.0",
-  "description": "ZeppBot - moderation bot + dashboard (Discord)",
+  "description": "ZeppBot (JSON storage) - Discord moderation bot with dashboard (no SQL)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "deploy-commands": "node deploy-commands.js"
   },
   "dependencies": {
-    "discord.js": "^14.11.0",
-    "express": "^4.18.2",
-    "mysql2": "^3.3.0",
-    "dotenv": "^16.0.3",
     "body-parser": "^1.20.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2"
   },
   "engines": {
     "node": ">=16.11.0"

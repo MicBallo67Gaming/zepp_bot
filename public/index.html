@@ -3,46 +3,156 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ZeppBot - Panel</title>
+  <title>ZeppBot - Panel (Przez MicBallo67)</title>
   <style>
     body{font-family:Arial,Helvetica,sans-serif;background:#0b0f1a;color:#e6eef8;padding:20px}
     .card{background:#0f1724;padding:16px;border-radius:8px;margin:10px 0}
     input,button{padding:8px;margin:6px 0;border-radius:6px;border:1px solid #243240;background:#081322;color:#fff}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    th,td{padding:8px;border-bottom:1px solid #243240}
+    .log{background:#081826;padding:8px;border-radius:6px;margin:6px 0}
+    .item{background:#081826;padding:10px;border-radius:6px;margin:8px 0}
   </style>
 </head>
 <body>
-  <h1>ZeppBot - Panel (Polski)</h1>
+  <h1>ZeppBot - Panel (PL) (Przez MicBallo67)</h1>
+
+  <!-- LOGIN -->
   <div class="card">
-    <h3>Logowanie do panelu</h3>
+    <h3>Logowanie do panelu administratora</h3>
     <label>ID serwera</label><br><input id="serverId" placeholder="Wprowadź ID serwera"><br>
-    <label>Hasło</label><br><input id="password" type="password" placeholder="Hasło"><br>
+    <label>Hasło (Ustawione przez /panelogon)</label><br><input id="password" type="password" placeholder="Hasło"><br>
     <button onclick="login()">Zaloguj</button>
     <div id="loginMsg"></div>
   </div>
+
+  <!-- PANEL -->
   <div id="panel" style="display:none">
+
+    <!-- LOGI -->
     <div class="card">
       <h3>Logi moderacji</h3>
       <div id="logs">Ładowanie...</div>
     </div>
+
+    <!-- SKLEP -->
+    <div class="card">
+      <h3>Sklep ekonomii</h3>
+
+      <div id="shopList">Ładowanie...</div>
+
+      <h4>Dodaj nowy przedmiot</h4>
+      <input id="itemName" placeholder="Nazwa">
+      <input id="itemPrice" type="number" placeholder="Cena">
+      <button onclick="addItem()">Dodaj</button>
+
+      <div id="shopMsg"></div>
+    </div>
+
   </div>
-  <script>
-    async function login(){
-      const serverId=document.getElementById('serverId').value.trim();
-      const password=document.getElementById('password').value.trim();
-      if(!serverId||!password){document.getElementById('loginMsg').innerText='Podaj dane';return;}
-      const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({serverId,password})});
-      const j=await res.json();
-      if(res.ok){ document.getElementById('loginMsg').innerText='Zalogowano'; document.getElementById('panel').style.display='block'; loadLogs(serverId); }
-      else { document.getElementById('loginMsg').innerText='Błąd: '+(j.error||''); }
-    }
-    async function loadLogs(serverId){
-      const res=await fetch('/api/logs/'+serverId);
-      const logs=await res.json();
-      const html=logs.map(l=>`<div><b>${l.action}</b> ${l.user_id} przez ${l.moderator} (${l.reason}) - ${l.created_at}</div>`).join('');
-      document.getElementById('logs').innerHTML=html||'Brak';
-    }
-  </script>
+
+<script>
+
+let CURRENT_SERVER = null;
+
+// =======================
+//      LOGOWANIE
+// =======================
+async function login(){
+  const serverId=document.getElementById('serverId').value.trim();
+  const password=document.getElementById('password').value.trim();
+  if(!serverId||!password){
+    document.getElementById('loginMsg').innerText='Podaj dane';
+    return;
+  }
+  const res=await fetch('/api/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({serverId,password})
+  });
+
+  const j=await res.json();
+  if(res.ok){
+    CURRENT_SERVER = serverId;
+    document.getElementById('loginMsg').innerText='Zalogowano!';
+    document.getElementById('panel').style.display='block';
+    loadLogs(serverId);
+    loadShop(serverId);
+  } else {
+    document.getElementById('loginMsg').innerText='Błąd: '+j.error;
+  }
+}
+
+// =======================
+//      LOGI
+// =======================
+async function loadLogs(serverId){
+  const res=await fetch('/api/logs/'+serverId);
+  const logs=await res.json();
+  const html=logs.map(l=>`<div class="log">
+      <b>${l.action}</b> - ${l.user} (by ${l.moderator})<br>
+      ${l.reason}<br>
+      <small>${l.time}</small>
+    </div>`).join('');
+  document.getElementById('logs').innerHTML=html||'Brak logów';
+}
+
+// =======================
+//      SKLEP
+// =======================
+async function loadShop(serverId){
+  const res = await fetch('/api/shop/get/'+serverId);
+  const j = await res.json();
+
+  const div = document.getElementById('shopList');
+
+  if(!res.ok){
+    div.innerHTML = 'Błąd ładowania sklepu.';
+    return;
+  }
+
+  const items = j.shop || [];
+
+  div.innerHTML = items.map((item,i)=>`
+    <div class="item">
+      <b>${item.name}</b> — ${item.price} monet<br>
+      <button onclick="removeItem(${i})">Usuń</button>
+    </div>
+  `).join('') || 'Brak przedmiotów w sklepie.';
+}
+
+async function addItem(){
+  const name = document.getElementById('itemName').value.trim();
+  const price = Number(document.getElementById('itemPrice').value.trim());
+
+  if(!name || !price){
+    document.getElementById('shopMsg').innerText = 'Podaj nazwę i cenę.';
+    return;
+  }
+
+  const res = await fetch('/api/shop/save/'+CURRENT_SERVER,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'add',name,price})
+  });
+
+  const j = await res.json();
+  document.getElementById('shopMsg').innerText = j.ok ? "Dodano!" : j.error;
+
+  loadShop(CURRENT_SERVER);
+}
+
+async function removeItem(index){
+  const res = await fetch('/api/shop/save/'+CURRENT_SERVER,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'remove',index})
+  });
+
+  const j = await res.json();
+  document.getElementById('shopMsg').innerText = j.ok ? "Usunięto!" : j.error;
+
+  loadShop(CURRENT_SERVER);
+}
+
+</script>
 </body>
 </html>
