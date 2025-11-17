@@ -8,11 +8,6 @@
  *  - Node 18+
  *  - discord.js v14
  *  - npm install discord.js express body-parser cors dotenv
- *
- * Notes:
- *  - Make sure your environment variable DISCORD_TOKEN (or TOKEN) and CLIENT_ID (for deploy)
- *    are set in a .env file or in environment.
- *  - This file is intended for environments with persistent filesystem (Termux, VPS).
  */
 
 require('dotenv').config();
@@ -36,7 +31,7 @@ const {
   EmbedBuilder
 } = require('discord.js');
 
-const DATA_FILE = path.join(__dirname, 'data.json'); // change if you want
+const DATA_FILE = path.join(__dirname, 'data.json');
 const PORT = process.env.PORT || 3000;
 const WIDGET_REFRESH_MS = 60 * 1000; // 60s
 
@@ -44,14 +39,14 @@ const WIDGET_REFRESH_MS = 60 * 1000; // 60s
 function ensureData() {
   if (!fs.existsSync(DATA_FILE)) {
     const init = {
-      servers: {},    // server-specific config (panel password etc)
-      logs: [],       // moderation & purchase logs
+      servers: {},
+      logs: [],
       mutes: {},
       bans: {},
-      economy: {},    // economy[serverId][userId] = { balance,...}
-      shop: {},       // shop[serverId] = [ { id,name,desc,price,giverole,role,requiresrole } ]
-      widgets: [],    // { id, serverId, channelId, messageId, type }
-      tickets: {}     // tickets[serverId] = { lastTicketId, openTickets: { ticketId: { channelId, ownerId } } }
+      economy: {},
+      shop: {},
+      widgets: [],
+      tickets: {}
     };
     fs.writeFileSync(DATA_FILE, JSON.stringify(init, null, 2), 'utf8');
   }
@@ -63,7 +58,6 @@ async function readData() {
     const raw = await fsp.readFile(DATA_FILE, 'utf8');
     return JSON.parse(raw);
   } catch (e) {
-    // if parse error, create fresh structure to avoid crashes
     console.error('readData error, recreating file:', e.message);
     const init = {
       servers: {},
@@ -81,7 +75,6 @@ async function readData() {
 }
 
 async function writeData(obj) {
-  // atomic write
   const tmp = DATA_FILE + '.tmp';
   await fsp.writeFile(tmp, JSON.stringify(obj, null, 2), 'utf8');
   await fsp.rename(tmp, DATA_FILE);
@@ -121,12 +114,7 @@ const client = new Client({
 
 client.once('ready', async () => {
   console.log(`ZeppBot online jako ${client.user.tag}`);
-  // start widget refresher
-  try {
-    startWidgetRefresher();
-  } catch (e) {
-    console.error('startWidgetRefresher error', e);
-  }
+  try { startWidgetRefresher(); } catch (e) { console.error('startWidgetRefresher error', e); }
 });
 
 // Helper: check admin (Administrator or ManageGuild)
@@ -134,15 +122,11 @@ async function isAdmin(guild, userId) {
   try {
     const member = await guild.members.fetch(userId);
     return member.permissions.has(PermissionsBitField.Flags.Administrator) || member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-  } catch (e) {
-    return false;
-  }
+  } catch (e) { return false; }
 }
-
 // ----------------------- Leaderboard embed & refresher -----------------------
 function createLeaderboardEmbed(data, serverId, type) {
   const eco = (data.economy && data.economy[serverId]) || {};
-  // build array: { id, balance, totalSpent, itemsBought }
   const arr = Object.entries(eco).map(([id, obj]) => ({
     id,
     balance: obj.balance || 0,
@@ -150,15 +134,14 @@ function createLeaderboardEmbed(data, serverId, type) {
     itemsBought: obj.itemsBought || 0
   }));
 
-  let sorted;
-  let title;
+  let sorted, title;
   if (type === 'A') {
     sorted = arr.sort((a, b) => b.balance - a.balance);
     title = '🏆 TOP 10 — Salda (Balance)';
   } else if (type === 'B') {
     sorted = arr.sort((a, b) => b.totalSpent - a.totalSpent);
     title = '💸 TOP 10 — Wydane pieniądze';
-  } else { // 'C'
+  } else {
     sorted = arr.sort((a, b) => b.itemsBought - a.itemsBought);
     title = '🪙 TOP 10 — Ilość zakupów';
   }
@@ -171,13 +154,11 @@ function createLeaderboardEmbed(data, serverId, type) {
       }).join('\n')
     : 'Brak danych';
 
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle(title)
     .setDescription(description)
     .setColor(0xF1C40F)
     .setTimestamp();
-
-  return embed;
 }
 
 let widgetRefresherRunning = false;
@@ -191,7 +172,6 @@ function startWidgetRefresher() {
       const widgets = data.widgets || [];
       for (const w of widgets) {
         try {
-          // ensure server still exists in client
           const guild = client.guilds.cache.get(w.serverId) || await client.guilds.fetch(w.serverId).catch(()=>null);
           if (!guild) continue;
           const channel = guild.channels.cache.get(w.channelId) || await guild.channels.fetch(w.channelId).catch(()=>null);
@@ -223,14 +203,10 @@ async function handleOpenTicketButton(interaction, serverId) {
     ensureServerStructures(data, guild.id);
     const tm = data.tickets[guild.id];
 
-    // create ticket id
     tm.lastTicketId = (tm.lastTicketId || 0) + 1;
     const ticketId = tm.lastTicketId.toString().padStart(4, '0');
-
-    // channel name
     const channelName = `ticket-${ticketId}`;
 
-    // find category named 'tickets' or similar (optional)
     let category = guild.channels.cache.find(c => c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('ticket'));
     const options = {
       type: ChannelType.GuildText,
@@ -244,7 +220,6 @@ async function handleOpenTicketButton(interaction, serverId) {
 
     const channel = await guild.channels.create({ name: channelName, ...options }).catch(e => { throw e; });
 
-    // initial message
     const embed = new EmbedBuilder()
       .setTitle(`Ticket #${ticketId}`)
       .setDescription(`Witaj <@${user.id}>! Opisz swój problem poniżej. Administratorzy zostaną powiadomieni.`)
@@ -253,7 +228,6 @@ async function handleOpenTicketButton(interaction, serverId) {
 
     await channel.send({ content: `<@${user.id}>`, embeds: [embed] }).catch(()=>{});
 
-    // persist ticket meta
     tm.openTickets = tm.openTickets || {};
     tm.openTickets[ticketId] = { channelId: channel.id, ownerId: user.id, createdAt: new Date().toISOString() };
     data.tickets[guild.id] = tm;
@@ -267,12 +241,10 @@ async function handleOpenTicketButton(interaction, serverId) {
     try { await interaction.editReply({ content: `Błąd przy tworzeniu ticketu: ${e.message || e}`, ephemeral: true }); } catch (ex) {}
   }
 }
-
 // ----------------------- Interaction handling (commands & buttons) -----------------------
 client.on('interactionCreate', async (interaction) => {
-  // catch-all safe handler with error logging
   try {
-    // Buttons (ticket open)
+    // ---------------- BUTTONS ----------------
     if (interaction.isButton()) {
       const custom = interaction.customId;
       if (typeof custom === 'string' && custom.startsWith('open_ticket::')) {
@@ -301,14 +273,14 @@ client.on('interactionCreate', async (interaction) => {
     const shop = data.shop[serverId];
     const ticketsMeta = data.tickets[serverId];
 
-    // admin-only list
+    // admin-only commands
     const adminOnly = ['warn','kick','ban','mute','unmute','addmoney','additem','deleteitem','addwidget','delwidget','addticketpanel','addadmin','removeadmin','close'];
     if (adminOnly.includes(cmd)) {
       const ok = await isAdmin(guild, userId);
       if (!ok) return interaction.reply({ content: 'Ta komenda jest tylko dla adminów.', ephemeral: true });
     }
 
-    // HELP / INFO
+    // ---------------- HELP / INFO ----------------
     if (cmd === 'help') {
       return interaction.reply({
         content: 'Komendy:\nModeracja: warn kick ban mute unmute panelogon\nEkonomia: balance work daily weekly pay addmoney\nSklep: shop buy additem deleteitem\nTicket: addticketpanel close addadmin removeadmin\nWidgety: addwidget delwidget',
@@ -319,7 +291,7 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: 'ZeppBot — moderacja + ekonomia + sklep + ticket + leaderboard', ephemeral: true });
     }
 
-    // panelogon
+    // ---------------- PANEL ----------------
     if (cmd === 'panelogon') {
       const password = interaction.options.getString('password', true);
       data.servers[serverId] = data.servers[serverId] || {};
@@ -372,8 +344,7 @@ client.on('interactionCreate', async (interaction) => {
       await writeData(data);
       return interaction.reply({ content: `🔊 Odciszono ${target.tag}`, ephemeral: true });
     }
-
-    // ---------------- EKONOMIA ----------------
+// ---------------- EKONOMIA ----------------
     if (cmd === 'balance') {
       const u = getUserEconomyObj(data, serverId, userId);
       return interaction.reply({ content: `💰 Masz **${u.balance}** monet.`, ephemeral: true });
@@ -429,7 +400,7 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: `💸 Wysłałeś ${amount} monet do ${target.tag}`, ephemeral: true });
     }
 
-    // ---------------- SHOP (commands) ----------------
+    // ---------------- SHOP ----------------
     if (cmd === 'shop') {
       const shopList = data.shop[serverId] || [];
       if (shopList.length === 0) return interaction.reply({ content: '🛒 Sklep jest pusty.', ephemeral: true });
@@ -475,214 +446,109 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: `🛒 Kupiono: **${item.name}**`, ephemeral: true });
     }
 
- // ---------------- additem / deleteitem (admin) ----------------
-if (cmd === 'additem') {
-  const name = interaction.options.getString('name', true);
-  const price = interaction.options.getInteger('price', true);
-  const desc = interaction.options.getString('desc') || '';
-  const giverole = interaction.options.getBoolean('giverole') || false;
-  const roleId = interaction.options.getRole('role')?.id || '';
-  const requiresrole = interaction.options.getRole('requiresrole')?.id || '';
+    // ---------------- ADDITEM / DELETEITEM (admin) ----------------
+    if (cmd === 'additem') {
+      const name = interaction.options.getString('name', true);
+      const price = interaction.options.getInteger('price', true);
+      const desc = interaction.options.getString('desc') || '';
+      const giverole = interaction.options.getBoolean('giverole') || false;
+      const roleId = interaction.options.getRole('role')?.id || '';
+      const requiresrole = interaction.options.getRole('requiresrole')?.id || '';
 
-  data.shop[serverId] = data.shop[serverId] || [];
-  const item = { id: Date.now(), name, desc, price, giverole, role: roleId, requiresrole };
-  data.shop[serverId].push(item);
-  await writeData(data);
-  return interaction.reply({ content: `✅ Dodano przedmiot: ${name}`, ephemeral: true });
-}
-
-if (cmd === 'deleteitem') {
-  const id = interaction.options.getInteger('id', true) - 1;
-  const shopList = data.shop[serverId] || [];
-  if (!shopList[id]) return interaction.reply({ content: '❌ Nie ma takiego przedmiotu.', ephemeral: true });
-  const removed = shopList.splice(id, 1)[0];
-  data.shop[serverId] = shopList;
-  await writeData(data);
-  return interaction.reply({ content: `🗑️ Usunięto przedmiot: ${removed.name}`, ephemeral: true });
-}
-// ---------------- WIDGETS (addwidget, delwidget) ----------------
-if (cmd === 'addwidget') {
-  const type = interaction.options.getString('type', true).toUpperCase(); // A/B/C
-  const channel = interaction.options.getChannel('channel', true);
-
-  if (!['A','B','C'].includes(type))
-    return interaction.reply({ content: '❌ Typ widgetu musi być A, B lub C', ephemeral: true });
-
-  const embed = createLeaderboardEmbed(data, serverId, type);
-  const sent = await channel.send({ embeds: [embed] });
-
-  const wid = {
-    id: Date.now().toString(),
-    serverId,
-    channelId: channel.id,
-    messageId: sent.id,
-    type
-  };
-
-  data.widgets.push(wid);
-  await writeData(data);
-
-  return interaction.reply({ content: `✅ Widget dodany (ID: ${wid.id})`, ephemeral: true });
-}
-
-if (cmd === 'delwidget') {
-  const wid = interaction.options.getString('id', true);
-  const idx = data.widgets.findIndex(w => w.id === wid && w.serverId === serverId);
-  if (idx === -1)
-    return interaction.reply({ content: '❌ Nie znaleziono widgetu o podanym ID.', ephemeral: true });
-
-  data.widgets.splice(idx, 1);
-  await writeData(data);
-
-  return interaction.reply({ content: '🗑️ Usunięto widget', ephemeral: true });
-}
-if (cmd === 'addticketpanel') {
-  const channel = interaction.options.getChannel('channel', true);
-  const title = interaction.options.getString('title') || 'Otwórz ticket';
-  const desc = interaction.options.getString('description') || 'Kliknij przycisk, aby utworzyć ticket.';
-
-  const btn = new ButtonBuilder()
-    .setCustomId(`open_ticket::${serverId}`)
-    .setLabel('Otwórz ticket')
-    .setStyle(ButtonStyle.Primary);
-
-  const row = new ActionRowBuilder().addComponents(btn);
-  const embed = new EmbedBuilder().setTitle(title).setDescription(desc).setColor(0x00AAFF);
-
-  await channel.send({ embeds: [embed], components: [row] });
-
-  data.tickets[serverId] = data.tickets[serverId] || { lastTicketId: 0, openTickets: {} };
-  await writeData(data);
-
-  return interaction.reply({ content: `✅ Panel ticketowy wysłany do ${channel}`, ephemeral: true });
-}
-if (cmd === 'close') {
-  let targetChannel = interaction.channel;
-  const argChannel = interaction.options.getChannel('channel');
-  if (argChannel) targetChannel = argChannel;
-
-  const tm = data.tickets[serverId] || { openTickets: {} };
-  const ticketEntry = Object.entries(tm.openTickets)
-    .find(([tid, info]) => info.channelId === targetChannel.id);
-
-  if (!ticketEntry)
-    return interaction.reply({ content: '❌ To nie wygląda jak kanał ticketowy.', ephemeral: true });
-
-  const [ticketId, info] = ticketEntry;
-
-  try {
-    await targetChannel.delete(`Ticket ${ticketId} closed by ${interaction.user.tag}`);
-  } catch (e) {
-    return interaction.reply({ content: `Błąd przy usuwaniu kanału: ${e.message}`, ephemeral: true });
-  }
-
-  delete tm.openTickets[ticketId];
-  data.tickets[serverId] = tm;
-
-  data.logs.unshift({
-    server: serverId,
-    user: interaction.user.id,
-    action: 'ticket_close',
-    ticket: ticketId,
-    time: new Date().toISOString()
-  });
-
-  await writeData(data);
-  return;
-}
-if (cmd === 'addadmin' || cmd === 'removeadmin') {
-  const member = interaction.options.getMember('user', true);
-  const tm = data.tickets[serverId] || { openTickets: {} };
-
-  const ticketEntry = Object.entries(tm.openTickets)
-    .find(([tid, info]) => info.channelId === interaction.channel.id);
-
-  if (!ticketEntry)
-    return interaction.reply({ content: 'Ta komenda działa tylko w kanale ticketowym.', ephemeral: true });
-
-  try {
-    if (cmd === 'addadmin') {
-      await interaction.channel.permissionOverwrites.edit(member.id, {
-        ViewChannel: true,
-        SendMessages: true
-      });
-
-      interaction.reply({ content: `✅ Dodano ${member.user.tag} do ticketu.`, ephemeral: true });
-    } else {
-      await interaction.channel.permissionOverwrites.delete(member.id);
-      interaction.reply({ content: `✅ Usunięto ${member.user.tag} z ticketu.`, ephemeral: true });
+      data.shop[serverId] = data.shop[serverId] || [];
+      const item = { id: Date.now(), name, desc, price, giverole, role: roleId, requiresrole };
+      data.shop[serverId].push(item);
+      await writeData(data);
+      return interaction.reply({ content: `✅ Dodano przedmiot: ${name}`, ephemeral: true });
     }
+
+    if (cmd === 'deleteitem') {
+      const idnum = interaction.options.getInteger('item', true) - 1;
+      const shopList = data.shop[serverId] || [];
+      if (!shopList[idnum]) return interaction.reply({ content: '❌ Nie ma takiego przedmiotu.', ephemeral: true });
+      const name = shopList[idnum].name;
+      shopList.splice(idnum, 1);
+      data.shop[serverId] = shopList;
+      await writeData(data);
+      return interaction.reply({ content: `🗑️ Usunięto przedmiot: ${name}`, ephemeral: true });
+    }
+// ---------------- TICKETY (admin) ----------------
+    if (cmd === 'addticketpanel') {
+      const channel = interaction.options.getChannel('channel', true);
+      const label = interaction.options.getString('label') || 'Otwórz ticket';
+      const btnId = `open_ticket::${serverId}`;
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(btnId)
+          .setLabel(label)
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({ content: 'Kliknij przycisk, aby otworzyć ticket:', components: [row] });
+      return interaction.reply({ content: `✅ Panel ticketów dodany do ${channel}`, ephemeral: true });
+    }
+
+    if (cmd === 'close') {
+      const channel = interaction.channel;
+      const tm = data.tickets[serverId];
+      if (!tm || !tm.openTickets) return interaction.reply({ content: '❌ Brak ticketów.', ephemeral: true });
+
+      const ticketEntry = Object.entries(tm.openTickets).find(([id, t]) => t.channelId === channel.id);
+      if (!ticketEntry) return interaction.reply({ content: '❌ To nie jest ticket.', ephemeral: true });
+
+      const [ticketId, ticketData] = ticketEntry;
+      delete tm.openTickets[ticketId];
+      data.tickets[serverId] = tm;
+      data.logs.unshift({ server: serverId, user: userId, action: 'ticket_close', ticket: ticketId, time: new Date().toISOString() });
+      await writeData(data);
+
+      await channel.delete().catch(()=>{});
+      return;
+    }
+
+    if (cmd === 'addadmin') {
+      const target = interaction.options.getUser('user', true);
+      data.servers[serverId].admins = data.servers[serverId].admins || [];
+      if (!data.servers[serverId].admins.includes(target.id)) data.servers[serverId].admins.push(target.id);
+      await writeData(data);
+      return interaction.reply({ content: `✅ Dodano ${target.tag} jako admina panelu.`, ephemeral: true });
+    }
+
+    if (cmd === 'removeadmin') {
+      const target = interaction.options.getUser('user', true);
+      data.servers[serverId].admins = data.servers[serverId].admins || [];
+      data.servers[serverId].admins = data.servers[serverId].admins.filter(id => id !== target.id);
+      await writeData(data);
+      return interaction.reply({ content: `✅ Usunięto ${target.tag} z adminów panelu.`, ephemeral: true });
+    }
+
+    // ---------------- WIDGETY ----------------
+    if (cmd === 'addwidget') {
+      const channel = interaction.options.getChannel('channel', true);
+      const type = interaction.options.getString('type', true); // 'A','B','C'
+      const embed = createLeaderboardEmbed(data, serverId, type);
+      const message = await channel.send({ embeds: [embed] });
+
+      data.widgets.push({ id: Date.now(), serverId, channelId: channel.id, messageId: message.id, type });
+      await writeData(data);
+      return interaction.reply({ content: `✅ Dodano widget do ${channel}`, ephemeral: true });
+    }
+
+    if (cmd === 'delwidget') {
+      const channel = interaction.options.getChannel('channel', true);
+      data.widgets = data.widgets.filter(w => w.channelId !== channel.id);
+      await writeData(data);
+      return interaction.reply({ content: `🗑️ Usunięto widget z ${channel}`, ephemeral: true });
+    }
+
   } catch (e) {
-    interaction.reply({ content: `Błąd: ${e.message}`, ephemeral: true });
+    console.error('interactionCreate error', e && e.message ? e.message : e);
+    try { await interaction.reply({ content: `Błąd: ${e.message || e}`, ephemeral: true }); } catch (ex) {}
   }
+});
 
-  return;
-}
-// ----------------------- Helper functions for widgets & tickets -----------------------
-
-function createLeaderboardEmbed(data, serverId, type) {
-  const eco = (data.economy && data.economy[serverId]) || {};
-  let arr = Object.entries(eco).map(([userId, u]) => {
-    if (type === 'A') return { userId, value: u.balance || 0 };
-    if (type === 'B') return { userId, value: u.totalSpent || 0 };
-    if (type === 'C') return { userId, value: u.itemsBought || 0 };
-    return { userId, value: 0 };
-  });
-  arr.sort((a,b) => b.value - a.value);
-  let txt = '';
-  arr.slice(0,10).forEach((x,i) => {
-    txt += `**${i+1}. <@${x.userId}>** — ${x.value}\n`;
-  });
-  const embed = new EmbedBuilder().setTitle(`Leaderboard ${type}`).setDescription(txt || 'Brak danych').setColor(0x00AAFF);
-  return embed;
-}
-
-async function startWidgetRefresher() {
-  setInterval(async () => {
-    try {
-      const data = await readData();
-      for (const w of data.widgets) {
-        const guild = client.guilds.cache.get(w.serverId);
-        if (!guild) continue;
-        const channel = guild.channels.cache.get(w.channelId);
-        if (!channel) continue;
-        const msg = await channel.messages.fetch(w.messageId).catch(()=>null);
-        if (!msg) continue;
-        const embed = createLeaderboardEmbed(data, w.serverId, w.type);
-        await msg.edit({ embeds: [embed] });
-      }
-    } catch (e) { console.error('Widget refresh error', e); }
-  }, 60*1000);
-}
-
-async function handleOpenTicketButton(interaction, serverId) {
-  const data = await readData();
-  const tm = data.tickets[serverId] || { lastTicketId: 0, openTickets: {} };
-  tm.lastTicketId = (tm.lastTicketId || 0) + 1;
-  const ticketId = tm.lastTicketId;
-  const guild = interaction.guild;
-  const user = interaction.user;
-
-  const channelName = `ticket-${ticketId}`;
-  const perms = [
-    { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-    { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-  ];
-
-  const ch = await guild.channels.create({
-    name: channelName,
-    type: ChannelType.GuildText,
-    permissionOverwrites: perms
-  });
-
-  tm.openTickets[ticketId] = { channelId: ch.id, ownerId: user.id, created: new Date().toISOString() };
-  data.tickets[serverId] = tm;
-  await writeData(data);
-
-  const embed = new EmbedBuilder().setTitle(`Ticket #${ticketId}`).setDescription('Poczekaj na odpowiedź administracji').setColor(0x00AAFF);
-  await ch.send({ content: `<@${user.id}>`, embeds: [embed] });
-  await interaction.reply({ content: `✅ Ticket utworzony: ${ch}`, ephemeral: true });
-}
-
-// ----------------------- Client login -----------------------
-client.login(process.env.TOKEN);
+// ---------------- START BOT ----------------
+client.login(process.env.DISCORD_TOKEN || process.env.TOKEN)
+  .then(() => console.log('Bot zalogowany'))
+  .catch(e => console.error('Login error', e));
